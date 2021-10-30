@@ -4,9 +4,17 @@ const path = require("path");
 const csv = require("csv-parser");
 const fs = require("fs");
 const { google } = require("googleapis");
+const { CANCELLED } = require("dns");
 const { OAuth2 } = google.auth;
 const today = new Date();
 require("dotenv").config();
+
+
+//VARIABLES
+const arrayOfCancelledGames = [];
+const linkForAllFutureGames = "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
+const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
+////
 
 //GOOGLE CALENDAR AUTHENTICATION
 const oAuth2Client = new OAuth2(
@@ -21,9 +29,9 @@ const calender = google.calendar({
   version: "v3",
   auth: oAuth2Client,
 });
+//// 
 
 //TARGET DOWNLOAD PATH FOR FILES DOWNLOADED FROM GAME OFFICIALS
-const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
 
 //NAMES TO CHECK FOR
 const checkForPeople = [
@@ -32,49 +40,101 @@ const checkForPeople = [
   "SKYLER BALL",
   "DAWN CHAPPELL",
 ];
+////
 
-//GET FILE FROM GAME OFFICIALS
-//if want to see browser in action uncomment headless
-async function downloadFileFromGameOfficials(name, pass) {
+  
+//GET INFO FROM GAME OFFICIALS
+//this includes {canceled game numbers, current and future games}
+
+//LOGIN 
+async function login(page, name, pass) {
+  console.log("Logging in");
+  await page.goto("https://www.gameofficials.net/login.cfm");
+  await page.waitForSelector("#login_username");
+  await page.type("#login_username", name);
+  await page.type("#login_password", pass);
+  await page.click("#login_submit");
+  await page.waitForNavigation();
+}
+
+//DOWNLOAD REPORT
+async function downloadCalendarReportfromGameOfficials(){
   console.log("Getting Data from website");
   const browser = await puppeteer.launch({
     //headless: false,
   });
   var [page] = await browser.pages();
-  await page.goto("https://www.gameofficials.net/public/default.cfm");
-  console.log(`Logging In ${name}`);
-  await page.type("#username", name);
-  await page.type("#password", pass);
-
-  //target button and click
-  const [button] = await page.$x("//button[contains(., 'Log In')]");
-  if (button) {
-    await button.click();
-  }
-  await page.waitForTimeout(2000);
-  await page.goto(
-    "https://www.gameofficials.net/reports/reportInfo.cfm?reportMenuID=52"
-  );
-
-  //allow download to a specific target location
+  await page.goto("https://www.gameofficials.net/reports/reportInfo.cfm?reportMenuID=52");
   await page._client.send("Page.setDownloadBehavior", {
     behavior: "allow",
     downloadPath: downloadPath,
   });
-
-  //Target Button
   await page.click("#GetNormal");
   console.log("Downloading File");
   await page.waitForTimeout(5000);
   console.log("closing Browser");
   await page.close();
-  editFileForUpload(name);
 }
 
-//Need to loop through each downloaded file, check to see if any changes from previous file,
-//if event has disappeared, assume it has been canceled and remove from calendar
-//if file has changed, pull out only the difference and run append and update calendar
+//CHECK FOR CANCELLED GAMES
+async function getEventsToDeleteFromCalendar(page) {
+  //scrape the page for cancelled games as the report doesn't include this
+  console.log("Getting Cancelled Games");
+  await page.goto(linkForAllFutureGames);
+  
+  try {
+    //find the cells with the word "Cancelled" in them and add them to the array
+    const cells = await page.$$("td");
+    for (let i = 0; i < cells.length; i++) {
+      const text = await cells[i].evaluate(cell => cell.textContent);
+      if (text.includes("Cancelled")) {
+        arrayOfCancelledGames.push(text);
+      }
+    }
+    //remove the whitespace and non-number characters from the array
+    for (let i = 0; i < arrayOfCancelledGames.length; i++) {
+      arrayOfCancelledGames[i] = arrayOfCancelledGames[i].replace(/\s/g, "");
+      arrayOfCancelledGames[i] = arrayOfCancelledGames[i].replace(/[^0-9]/g, "");
+    }
+  return arrayOfCancelledGames;
+  } catch (error) {
+    console.log(error);
+  }
+}
 
+//Get Download File From Game Officials
+// async function downloadFileFromGameOfficials(name, pass) {
+  // console.log("Getting Data from website");
+  // const browser = await puppeteer.launch({
+  //   //if want to see browser in action uncomment headless
+  //   //headless: false,
+  // });
+  // var [page] = await browser.pages();
+  // await page.goto("https://www.gameofficials.net/public/default.cfm");
+  // console.log(`Logging In ${name}`);
+  // await page.type("#username", name);
+  // await page.type("#password", pass);
+
+  // //target button and click
+  // const [button] = await page.$x("//button[contains(., 'Log In')]");
+  // if (button) {
+  //   await button.click();
+  // }
+  // await page.waitForTimeout(2000);
+  // await getEventsToDeleteFromCalendar(page);
+  // console.log(arrayOfCancelledGames)
+  // await page.goto(
+  //   "https://www.gameofficials.net/reports/reportInfo.cfm?reportMenuID=52"
+  // );
+
+  //allow download to a specific target location
+  // await page._client.send("Page.setDownloadBehavior", {
+  //   behavior: "allow",
+  //   downloadPath: downloadPath,
+  // });
+
+  //Target Button
+}
 const gameNumbers = [];
 //read csv file and show on console
 function editFileForUpload(name) {
