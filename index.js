@@ -4,24 +4,16 @@ const path = require("path");
 const csv = require("csv-parser");
 const fs = require("fs");
 const { google } = require("googleapis");
-const { CANCELLED } = require("dns");
-const { get } = require("http");
 const { OAuth2 } = google.auth;
 const today = new Date();
 require("dotenv").config();
 
-
 //VARIABLES
 const arrayOfCancelledGames = [];
-const linkForAllFutureGames = "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
+const linkForAllFutureGames =
+  "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
 const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
 ////
-
-
-//test variables to be deleted later
-let name = process.env.USER_NAME.split(",")[0];
-console.log(name)
-let pass = process.env.USER_PASS.split(",")[0];
 
 //GOOGLE CALENDAR AUTHENTICATION
 const oAuth2Client = new OAuth2(
@@ -36,7 +28,7 @@ const calender = google.calendar({
   version: "v3",
   auth: oAuth2Client,
 });
-//// 
+////
 
 //TARGET DOWNLOAD PATH FOR FILES DOWNLOADED FROM GAME OFFICIALS
 
@@ -49,15 +41,15 @@ const checkForPeople = [
 ];
 ////
 
-let savedPage = '' 
+let savedPage = "";
 
 //GET INFO FROM GAME OFFICIALS
 //this includes {canceled game numbers, current and future games}
 
-//LOGIN 
+//LOGIN
 async function login(name, pass) {
   const browser = await puppeteer.launch({
-    headless: false,
+    //headless: false,
   });
   var [page] = await browser.pages();
   console.log("Logging in");
@@ -71,16 +63,18 @@ async function login(name, pass) {
   //target button and click
   const [button] = await page.$x("//button[contains(., 'Log In')]");
   if (button) {
-	await button.click();
+    await button.click();
   }
   await page.waitForTimeout(2000);
   savedPage = page;
 }
 
 //DOWNLOAD REPORT
-async function downloadCalendarReportfromGameOfficials(savedPage){
+async function downloadCalendarReportfromGameOfficials(savedPage) {
   console.log("Getting Data from website");
-  await page.goto("https://www.gameofficials.net/reports/reportInfo.cfm?reportMenuID=52");
+  await page.goto(
+    "https://www.gameofficials.net/reports/reportInfo.cfm?reportMenuID=52"
+  );
   await page._client.send("Page.setDownloadBehavior", {
     behavior: "allow",
     downloadPath: downloadPath,
@@ -88,13 +82,13 @@ async function downloadCalendarReportfromGameOfficials(savedPage){
   await page.click("#GetNormal");
   console.log("Downloading File");
   await page.waitForTimeout(2000);
-  savedPage = page; 
+  savedPage = page;
 }
 
 //CHECK FOR CANCELLED GAMES
 async function getEventsToDeleteFromCalendar(savedPage) {
   //scrape the page for cancelled games as the report doesn't include this
-  page = savedPage
+  page = savedPage;
   console.log("Getting Cancelled Games");
   await page.goto(linkForAllFutureGames);
   page.waitForTimeout(10000);
@@ -102,19 +96,29 @@ async function getEventsToDeleteFromCalendar(savedPage) {
     //find the cells with the word "Cancelled" in them and add them to the array
     const cells = await page.$$("td");
     for (let i = 0; i < cells.length; i++) {
-      const text = await cells[i].evaluate(cell => cell.textContent);
+      const text = await cells[i].evaluate((cell) => cell.textContent);
       if (text.includes("Cancelled")) {
         arrayOfCancelledGames.push(text);
+      }
+      if (text.includes("Declined")) {
+        arrayOfCancelledGames.push(
+          await cells[i + 1].evaluate((cell) => cell.textContent)
+        );
       }
     }
     //remove the whitespace and non-number characters from the array
     for (let i = 0; i < arrayOfCancelledGames.length; i++) {
       arrayOfCancelledGames[i] = arrayOfCancelledGames[i].replace(/\s/g, "");
-      arrayOfCancelledGames[i] = arrayOfCancelledGames[i].replace(/[^0-9]/g, "");
+      arrayOfCancelledGames[i] = arrayOfCancelledGames[i].replace(
+        /[^0-9]/g,
+        ""
+      );
     }
-	console.log(arrayOfCancelledGames)
-	if (arrayOfCancelledGames.length == 0) { console.log("no cancelled games found")}
-  return arrayOfCancelledGames;
+    console.log(arrayOfCancelledGames);
+    if (arrayOfCancelledGames.length == 0) {
+      console.log("no cancelled games found");
+    }
+    return arrayOfCancelledGames;
   } catch (error) {
     console.log(error);
   }
@@ -136,44 +140,52 @@ async function downloadFileFromGameOfficials(savedPage) {
   await savedPage.click("input[name=doCustomDate]");
   await savedPage.waitForTimeout(2000);
   //set the start date to today
-    var date = today.getDate();
-    var month = today.getMonth() + 1; // Since getMonth() returns month from 0-11 not 1-12
-    var year = today.getFullYear();
-    var dateStr = month + "/" + date + "/" + year;
-	console.log(dateStr)
-	//click the input field with the id of "start" and remove the text
-	await savedPage.click("#start");
-	await savedPage.waitForTimeout(800);
-	await savedPage.keyboard.down("Control");
-	await savedPage.keyboard.press("A");
-	await savedPage.keyboard.up("Control");
-	await savedPage.keyboard.press("Backspace");
-	await savedPage.keyboard.type(dateStr);
-	await savedPage.waitForTimeout(800);
-	//click the input field with the id of "end" and remove the text
+  var date = today.getDate();
+  var month = today.getMonth() + 1; // Since getMonth() returns month from 0-11 not 1-12
+  var year = today.getFullYear();
+  var dateStr = month + "/" + date + "/" + year;
+  console.log(dateStr);
+  //click the input field with the id of "start" and remove the text
+  await savedPage.click("#start");
+  await savedPage.waitForTimeout(800);
+  await savedPage.keyboard.down("Control");
+  await savedPage.keyboard.press("A");
+  await savedPage.keyboard.up("Control");
+  await savedPage.keyboard.press("Backspace");
+  await savedPage.keyboard.type(dateStr);
+  await savedPage.waitForTimeout(800);
+  //click the input field with the id of "end" and remove the text
   //set the end date to 90 days from today
   //set future date variable to be 90 days from today
   var futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 90);
-  var futureDateStr = futureDate.getMonth() + 1 + "/" + futureDate.getDate() + "/" + futureDate.getFullYear();
-	await savedPage.click("#end");
-	await savedPage.waitForTimeout(800);
-	await savedPage.keyboard.down("Control");
-	await savedPage.keyboard.press("A");
-	await savedPage.keyboard.up("Control");
-	await savedPage.keyboard.press("Backspace");
-	await savedPage.keyboard.type(futureDateStr);
-	await savedPage.waitForTimeout(800);
+  var futureDateStr =
+    futureDate.getMonth() +
+    1 +
+    "/" +
+    futureDate.getDate() +
+    "/" +
+    futureDate.getFullYear();
+  await savedPage.click("#end");
+  await savedPage.waitForTimeout(800);
+  await savedPage.keyboard.down("Control");
+  await savedPage.keyboard.press("A");
+  await savedPage.keyboard.up("Control");
+  await savedPage.keyboard.press("Backspace");
+  await savedPage.keyboard.type(futureDateStr);
+  await savedPage.waitForTimeout(800);
   //Target Button
   await savedPage.click("#GetNormal");
   console.log("Downloading File");
   await savedPage.waitForTimeout(5000);
-  console.log('done with download, moving on to getting canceled list of events')
+  console.log(
+    "done with download, moving on to getting canceled list of events"
+  );
 }
 
 const gameNumbers = [];
 //READ CSV FILE AND SHOW ON CONSOLE
-function editFileForUpload(name) {
+async function editFileForUpload(name) {
   const results = [];
   console.log("Starting the editing process");
   fs.createReadStream(
@@ -186,8 +198,10 @@ function editFileForUpload(name) {
       let gameNumber = row.Description.match(regex);
       let checkDate = new Date(row["Start Date"]);
       if (!gameNumbers.includes(Number(gameNumber[0])) && checkDate >= today) {
-        gameNumbers.push(Number(gameNumber[0]));
-        results.push(row);
+        if (!arrayOfCancelledGames.includes(gameNumber[0])) {
+          gameNumbers.push(Number(gameNumber[0]));
+          results.push(row);
+        }
       }
     })
     .on("end", () => {
@@ -237,67 +251,68 @@ function editFileForUpload(name) {
         const address = results[i].Description.match(
           /(?<=\Directions:\s)[\s\S]*?(?=-)/g
         );
-        calender.events.insert(
-          {
-            calendarId: process.env.CALENDAR_ID,
-            resource: {
-              summary: results[i]["Subject"],
-              start: { dateTime: initialStartDate },
-              end: { dateTime: initialEndDate },
-              description: results[i]["Description"],
-              location: address,
-            },
-          },
-          (err) => {
-            if (err)
-              return console.error("Calendar Event Creation Failed:", err);
-          }
-        );
+        //     calender.events.insert(
+        //       {
+        //         calendarId: process.env.CALENDAR_ID,
+        //         resource: {
+        //           summary: results[i]["Subject"],
+        //           start: { dateTime: initialStartDate },
+        //           end: { dateTime: initialEndDate },
+        //           description: results[i]["Description"],
+        //           location: address,
+        //         },
+        //       },
+        //       (err) => {
+        //         if (err)
+        //           return console.error("Calendar Event Creation Failed:", err);
+        //       }
+        //     );
+        let checkGameNumber = /(?<=\Game:\s)(\w+)/g;
         console.log(
-          `Event Created: ${results[i]["Subject"]} which is ${i} of ${results.length}`
+          `Event Created: ${results[i]["Subject"]} Game Number: ${results[
+            i
+          ].Description.match(checkGameNumber)}`
         );
       }
       console.log(`CSV file successfully processed for ${name}`);
-
-	});
+    });
 }
 
 //DELETE FILE FOR NEW BATCH RUN and close browser
-function deleteFile() {	
-fs.unlink(
-	`../../../GoogleDrive/MyDrive/GameOfficials/OfficialsScheduleCalendarExport.csv`, 
-	(err) => {
-		if (err) throw err;
-		console.log('File deleted!');
-	}
-)
-//close browser
-await savedPage.close();
-}	
+async function deleteFile() {
+  fs.unlink(
+    `../../../GoogleDrive/MyDrive/GameOfficials/OfficialsScheduleCalendarExport.csv`,
+    (err) => {
+      if (err) throw err;
+      console.log("File deleted!");
+    }
+  );
+  //close browser
+  await savedPage.close();
+}
+////END OF GET INFO FROM GAME OFFICIALS
 
-
+//Start Program
 //Loop through each user that is saved
 async function runProgram() {
   for (j = 0; j < process.env.USER_NAME.split(",").length; j++) {
     console.log("Running Process");
     let name = process.env.USER_NAME.split(",")[j];
     let pass = process.env.USER_PASS.split(",")[j];
-	await login(name, pass)
+    await login(name, pass);
     await downloadFileFromGameOfficials(savedPage);
-	await getEventsToDeleteFromCalendar(savedPage);
-	await editFileForUpload(name)
-	await deleteFile()
-	console.log(`${name} has been processed`)
+    await getEventsToDeleteFromCalendar(savedPage);
+    await editFileForUpload(name);
+    await deleteFile();
+    console.log(`${name} has been processed`);
   }
   //console log server is done
   console.log("Server is done");
   //end server
-  server.close();
-  }
-
-try{
-runProgram();
 }
-catch(err){
-	console.log(err);
-}	
+
+try {
+  runProgram();
+} catch (err) {
+  console.log(err);
+}
