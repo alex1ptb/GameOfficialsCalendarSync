@@ -14,6 +14,8 @@ const linkForAllFutureGames =
   "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
 const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
 const calendarEventGameNumbers = [];
+const gameNumbers = [];
+let savedPage = "";
 ////
 
 //GOOGLE CALENDAR AUTHENTICATION
@@ -41,8 +43,6 @@ const checkForPeople = [
   "DAWN CHAPPELL",
 ];
 ////
-
-let savedPage = "";
 
 //GET INFO FROM GAME OFFICIALS
 //this includes {canceled game numbers, current and future games}
@@ -184,7 +184,6 @@ async function downloadFileFromGameOfficials(savedPage) {
   );
 }
 
-const gameNumbers = [];
 //READ CSV FILE AND SHOW ON CONSOLE
 async function editFileForUpload(name) {
   const results = [];
@@ -219,7 +218,29 @@ async function editFileForUpload(name) {
         results[i].Subject = `${peopleFound.join(" | ")} ${results[
           i
         ].Location.split("-").pop()}`;
+      console.log(`CSV file successfully processed for ${name}`);
+      return results
+      }});
+}
 
+//DELETE FILE FOR NEW BATCH RUN and close browser
+async function deleteFile() {
+  fs.unlink(
+    `../../../GoogleDrive/MyDrive/GameOfficials/OfficialsScheduleCalendarExport.csv`,
+    (err) => {
+      if (err) throw err;
+      console.log("File deleted!");
+    }
+  );
+  //close browser
+  await savedPage.close();
+}
+////END OF GET INFO FROM GAME OFFICIALS
+
+//GET CALENDAR EVENTS
+        //FROM HERE SHOULD BE IN CALENDAR FUNCTION / SECTION
+        //adjust dates to deal with calendar requirement
+//put all in for loop to go through results 
         const theStartDate = results[i]["Start Date"]
           .split("/")
           .reverse()
@@ -249,6 +270,8 @@ async function editFileForUpload(name) {
           dateAndTime[4],
           dateAndTime[5]
         );
+        //address is located inside of the description instead of it being marked for loaction.
+        //so this handles pulling from description and putting for location
         const address = results[i].Description.match(
           /(?<=\Directions:\s)[\s\S]*?(?=-)/g
         );
@@ -274,27 +297,7 @@ async function editFileForUpload(name) {
             i
           ].Description.match(checkGameNumber)}`
         );
-      }
-      console.log(`CSV file successfully processed for ${name}`);
-    });
-}
-
-//DELETE FILE FOR NEW BATCH RUN and close browser
-async function deleteFile() {
-  fs.unlink(
-    `../../../GoogleDrive/MyDrive/GameOfficials/OfficialsScheduleCalendarExport.csv`,
-    (err) => {
-      if (err) throw err;
-      console.log("File deleted!");
-    }
-  );
-  //close browser
-  await savedPage.close();
-}
-////END OF GET INFO FROM GAME OFFICIALS
-
-//GET CALENDAR EVENTS
-//get calendar events from google
+      }//get calendar events from google
 //get game numbers from the events
 //remove these events if they match the cancelled games in array
 const listEvents = calender.events
@@ -305,6 +308,7 @@ const listEvents = calender.events
   })
   .then(function (response) {
     const regex = /(?<=\Game:\s)(\w+)/g;
+    //for each event get the game number
     response.data.items.forEach((item) => {
       //match game numbers found
       const matchingValue = item.description.match(regex);
@@ -318,24 +322,18 @@ const listEvents = calender.events
           });
           console.log("deleted " + item.id);
         }
-        //console.log("Current game numbers " + calendarEventGameNumbers.sort());
+      });
+      gameNumbers.forEach((game) => {
+        if (game == matchingValue) {
+          calender.events.update({
+            calendarId: process.env.CALENDAR_ID,
+            eventId: item.id,
+          });
+        }
       });
     });
     //delete duplicate listings if found
     //NONE OF THE BELOW WORKS CURRENTLY, THERE ARE STILL DUPLICATES`
-    // console.log(calendarEventGameNumbers.sort());
-    // const testAry = [];
-    // const toFindDuplicates = (calendarEventGameNumbers) =>
-    //   calendarEventGameNumbers.map((element) => {
-    //     testAry.push(parseInt(element));
-    //   });
-    // console.log(testAry);
-    // testAry.filter((item, index, self) => {
-    //   return self.indexOf(Number(item)) == index;
-    // });
-    // const duplicateElements = toFindDuplicates(calendarEventGameNumbers);
-    // console.log(duplicateElements);
-    //
   });
 
 async function getListEventsAndDeleteDuplicates() {
@@ -353,11 +351,11 @@ async function runProgram() {
     console.log("Running Process");
     let name = process.env.USER_NAME.split(",")[j];
     let pass = process.env.USER_PASS.split(",")[j];
-    //await login(name, pass);
-    //await downloadFileFromGameOfficials(savedPage);
-    //await getEventsToDeleteFromCalendar(savedPage);
-    //await editFileForUpload(name);
-    //await deleteFile();
+    await login(name, pass);
+    await downloadFileFromGameOfficials(savedPage);
+    await getEventsToDeleteFromCalendar(savedPage);
+    await editFileForUpload(name);
+    await deleteFile();
     await getListEventsAndDeleteDuplicates();
     console.log(`${name} has been processed`);
   }
