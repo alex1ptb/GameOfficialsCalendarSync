@@ -9,10 +9,11 @@ const today = new Date();
 require("dotenv").config();
 
 //VARIABLES
-const arrayOfCancelledGames = [];
+const arrayOfCancelledGames = ["231891", "232771"];
 const linkForAllFutureGames =
   "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
 const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
+const calendarEventGameNumbers = [];
 ////
 
 //GOOGLE CALENDAR AUTHENTICATION
@@ -125,7 +126,7 @@ async function getEventsToDeleteFromCalendar(savedPage) {
   savedPage = page;
 }
 
-//Get Download File From Game Officials
+//GET DOWNLOAD FILE FROM GAME OFFICIALS
 async function downloadFileFromGameOfficials(savedPage) {
   console.log("Getting Data from website");
   await savedPage.goto(
@@ -138,7 +139,7 @@ async function downloadFileFromGameOfficials(savedPage) {
   });
   //click input type checkbox with name of "doCustomDate"
   await savedPage.click("input[name=doCustomDate]");
-  await savedPage.waitForTimeout(2000);
+  await savedPage.waitForTimeout(3000);
   //set the start date to today
   var date = today.getDate();
   var month = today.getMonth() + 1; // Since getMonth() returns month from 0-11 not 1-12
@@ -147,13 +148,13 @@ async function downloadFileFromGameOfficials(savedPage) {
   console.log(dateStr);
   //click the input field with the id of "start" and remove the text
   await savedPage.click("#start");
-  await savedPage.waitForTimeout(800);
+  await savedPage.waitForTimeout(1800);
   await savedPage.keyboard.down("Control");
   await savedPage.keyboard.press("A");
   await savedPage.keyboard.up("Control");
   await savedPage.keyboard.press("Backspace");
   await savedPage.keyboard.type(dateStr);
-  await savedPage.waitForTimeout(800);
+  await savedPage.waitForTimeout(1800);
   //click the input field with the id of "end" and remove the text
   //set the end date to 90 days from today
   //set future date variable to be 90 days from today
@@ -251,22 +252,22 @@ async function editFileForUpload(name) {
         const address = results[i].Description.match(
           /(?<=\Directions:\s)[\s\S]*?(?=-)/g
         );
-        //     calender.events.insert(
-        //       {
-        //         calendarId: process.env.CALENDAR_ID,
-        //         resource: {
-        //           summary: results[i]["Subject"],
-        //           start: { dateTime: initialStartDate },
-        //           end: { dateTime: initialEndDate },
-        //           description: results[i]["Description"],
-        //           location: address,
-        //         },
-        //       },
-        //       (err) => {
-        //         if (err)
-        //           return console.error("Calendar Event Creation Failed:", err);
-        //       }
-        //     );
+        calender.events.insert(
+          {
+            calendarId: process.env.CALENDAR_ID,
+            resource: {
+              summary: results[i]["Subject"],
+              start: { dateTime: initialStartDate },
+              end: { dateTime: initialEndDate },
+              description: results[i]["Description"],
+              location: address,
+            },
+          },
+          (err) => {
+            if (err)
+              return console.error("Calendar Event Creation Failed:", err);
+          }
+        );
         let checkGameNumber = /(?<=\Game:\s)(\w+)/g;
         console.log(
           `Event Created: ${results[i]["Subject"]} Game Number: ${results[
@@ -292,6 +293,59 @@ async function deleteFile() {
 }
 ////END OF GET INFO FROM GAME OFFICIALS
 
+//GET CALENDAR EVENTS
+//get calendar events from google
+//get game numbers from the events
+//remove these events if they match the cancelled games in array
+const listEvents = calender.events
+  .list({
+    calendarId: process.env.CALENDAR_ID,
+    //ensures not to pull events in the past
+    timeMin: new Date().toISOString(),
+  })
+  .then(function (response) {
+    const regex = /(?<=\Game:\s)(\w+)/g;
+    response.data.items.forEach((item) => {
+      //match game numbers found
+      const matchingValue = item.description.match(regex);
+      calendarEventGameNumbers.push(matchingValue);
+      //delete cancelled games from Google
+      arrayOfCancelledGames.forEach((cancelled) => {
+        if (cancelled == matchingValue) {
+          calender.events.delete({
+            calendarId: process.env.CALENDAR_ID,
+            eventId: item.id,
+          });
+          console.log("deleted " + item.id);
+        }
+        //console.log("Current game numbers " + calendarEventGameNumbers.sort());
+      });
+    });
+    //delete duplicate listings if found
+    //NONE OF THE BELOW WORKS CURRENTLY, THERE ARE STILL DUPLICATES`
+    // console.log(calendarEventGameNumbers.sort());
+    // const testAry = [];
+    // const toFindDuplicates = (calendarEventGameNumbers) =>
+    //   calendarEventGameNumbers.map((element) => {
+    //     testAry.push(parseInt(element));
+    //   });
+    // console.log(testAry);
+    // testAry.filter((item, index, self) => {
+    //   return self.indexOf(Number(item)) == index;
+    // });
+    // const duplicateElements = toFindDuplicates(calendarEventGameNumbers);
+    // console.log(duplicateElements);
+    //
+  });
+
+async function getListEventsAndDeleteDuplicates() {
+  try {
+    await listEvents;
+  } catch (err) {
+    console.log(err);
+  }
+}
+
 //Start Program
 //Loop through each user that is saved
 async function runProgram() {
@@ -299,11 +353,12 @@ async function runProgram() {
     console.log("Running Process");
     let name = process.env.USER_NAME.split(",")[j];
     let pass = process.env.USER_PASS.split(",")[j];
-    await login(name, pass);
-    await downloadFileFromGameOfficials(savedPage);
-    await getEventsToDeleteFromCalendar(savedPage);
-    await editFileForUpload(name);
-    await deleteFile();
+    //await login(name, pass);
+    //await downloadFileFromGameOfficials(savedPage);
+    //await getEventsToDeleteFromCalendar(savedPage);
+    //await editFileForUpload(name);
+    //await deleteFile();
+    await getListEventsAndDeleteDuplicates();
     console.log(`${name} has been processed`);
   }
   //console log server is done
