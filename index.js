@@ -9,7 +9,7 @@ const today = new Date();
 require("dotenv").config();
 
 //VARIABLES
-const arrayOfCancelledGames = ["231891", "232771"];
+const arrayOfCancelledGames = [];
 const linkForAllFutureGames =
   "https://www.gameofficials.net/Game/myGames.cfm?viewRange=allFuture&module=myGames";
 const downloadPath = path.resolve(`../../../GoogleDrive/MyDrive/GameOfficials`);
@@ -297,7 +297,8 @@ async function deleteFile() {
             i
           ].Description.match(checkGameNumber)}`
         );
-      }//get calendar events from google
+       //end of for loop
+      //get calendar events from google
 //get game numbers from the events
 //remove these events if they match the cancelled games in array
 const listEvents = calender.events
