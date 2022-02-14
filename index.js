@@ -272,7 +272,7 @@ fs.unlink(
 	}
 )
 //close browser
-await savedPage.close();
+savedPage.close();
 }	
 
 
@@ -292,7 +292,7 @@ async function runProgram() {
   //console log server is done
   console.log("Server is done");
   //end server
-  server.close();
+  // server.close();
   }
 
 try{
